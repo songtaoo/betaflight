@@ -533,6 +533,14 @@ static void servoTable(void)
         }
     }
 
+    // QUADX has no built-in servo mixer. Keep every explicitly forwarded
+    // auxiliary control surface updated, not only the two gimbal servos.
+    for (int i = 0; i < MAX_SUPPORTED_SERVOS; i++) {
+        if ((uint8_t)servoParams(i)->forwardFromChannel < MAX_SUPPORTED_RC_CHANNEL_COUNT) {
+            servo[i] = determineServoMiddleOrForwardFromChannel(i);
+        }
+    }
+
     // constrain servos
     for (int i = 0; i < MAX_SUPPORTED_SERVOS; i++) {
         servo[i] = constrain(servo[i], servoParams(i)->min, servoParams(i)->max); // limit the values
