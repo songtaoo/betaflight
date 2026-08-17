@@ -54,9 +54,14 @@
 #include "pg/rx.h"
 
 #include "rx/rx.h"
+#include "sensors/gyro.h"
 
 
-PG_REGISTER_WITH_RESET_FN(servoConfig_t, servoConfig, PG_SERVO_CONFIG, 0);
+#define QUADX_CONTROL_SURFACE_COUNT 4
+#define QUADX_SERVO_DEFAULT_GAIN 20
+#define QUADX_SERVO_GYRO_GROUND_TEST_SCALING 1.0f
+
+PG_REGISTER_WITH_RESET_FN(servoConfig_t, servoConfig, PG_SERVO_CONFIG, 1);
 
 void pgResetFn_servoConfig(servoConfig_t *servoConfig)
 {
@@ -65,6 +70,8 @@ void pgResetFn_servoConfig(servoConfig_t *servoConfig)
     servoConfig->tri_unarmed_servo = 1;
     servoConfig->servo_lowpass_freq = 0;
     servoConfig->channelForwardingStartChannel = AUX1;
+    servoConfig->quadxServoEnable = 0;
+    servoConfig->quadxServoGain = QUADX_SERVO_DEFAULT_GAIN;
 
 #ifdef SERVO1_PIN
     servoConfig->dev.ioTags[0] = IO_TAG(SERVO1_PIN);
@@ -105,6 +112,15 @@ int16_t servo[MAX_SUPPORTED_SERVOS];
 static uint8_t servoRuleCount = 0;
 static servoMixer_t currentServoMixer[MAX_SERVO_RULES];
 static int useServo;
+static bool quadxControlSurfacesEnabled(void)
+{
+#if MAX_SUPPORTED_SERVOS >= QUADX_CONTROL_SURFACE_COUNT
+    return getMixerMode() == MIXER_QUADX && servoConfig()->quadxServoEnable;
+#else
+    return false;
+#endif
+}
+
 
 
 #define COUNT_SERVO_RULES(rules) (sizeof(rules) / sizeof(servoMixer_t))
@@ -269,6 +285,9 @@ void servosInit(void)
 {
     // enable servos for mixes that require them. note, this shifts motor counts.
     useServo = mixers[getMixerMode()].useServo;
+    if (quadxControlSurfacesEnabled()) {
+        useServo = 1;
+    }
     // if we want camstab/trig, that also enables servos, even if mixer doesn't
     if (featureIsEnabled(FEATURE_SERVO_TILT) || featureIsEnabled(FEATURE_CHANNEL_FORWARDING)) {
         useServo = 1;
@@ -326,6 +345,15 @@ static void updateGimbalServos(uint8_t firstServoIndex)
     writeServoWithTracking(firstServoIndex + 0, SERVO_GIMBAL_PITCH);
     writeServoWithTracking(firstServoIndex + 1, SERVO_GIMBAL_ROLL);
 }
+#if MAX_SUPPORTED_SERVOS >= QUADX_CONTROL_SURFACE_COUNT
+static void writeQuadxControlSurfaceServos(uint8_t firstServoIndex)
+{
+    for (uint8_t i = 0; i < QUADX_CONTROL_SURFACE_COUNT; i++) {
+        writeServoWithTracking(firstServoIndex + i, i);
+    }
+}
+#endif
+
 
 static void servoTable(void);
 static void filterServos(void);
@@ -382,6 +410,15 @@ void writeServos(void)
         }
         break;
 #endif // USE_UNCOMMON_MIXERS
+#if MAX_SUPPORTED_SERVOS >= QUADX_CONTROL_SURFACE_COUNT
+    case MIXER_QUADX:
+        if (quadxControlSurfacesEnabled()) {
+            writeQuadxControlSurfaceServos(servoIndex);
+            servoIndex += QUADX_CONTROL_SURFACE_COUNT;
+        }
+        break;
+#endif
+
 
     default:
         break;
@@ -484,12 +521,57 @@ void servoMixer(void)
         servo[i] += determineServoMiddleOrForwardFromChannel(i);
     }
 }
+#if MAX_SUPPORTED_SERVOS >= QUADX_CONTROL_SURFACE_COUNT
+static int16_t quadxServoGroundTestInput(uint8_t axis)
+{
+    const float rateError = rcCommand[axis] - gyro.gyroADCf[axis] * QUADX_SERVO_GYRO_GROUND_TEST_SCALING;
+    return constrain(lrintf(rateError), -500, 500);
+}
+
+static void quadxControlSurfaceMixer(void)
+{
+    int16_t roll;
+    int16_t pitch;
+    int16_t yaw;
+
+    if (ARMING_FLAG(ARMED)) {
+        roll = constrain(lrintf(pidData[FD_ROLL].Sum * PID_SERVO_MIXER_SCALING), -500, 500);
+        pitch = constrain(lrintf(pidData[FD_PITCH].Sum * PID_SERVO_MIXER_SCALING), -500, 500);
+        yaw = constrain(lrintf(pidData[FD_YAW].Sum * PID_SERVO_MIXER_SCALING), -500, 500);
+    } else {
+        // Keep the motors disarmed while allowing stick and gyro direction checks on the bench.
+        roll = quadxServoGroundTestInput(ROLL);
+        pitch = quadxServoGroundTestInput(PITCH);
+        yaw = quadxServoGroundTestInput(YAW);
+    }
+
+    const int32_t mixed[QUADX_CONTROL_SURFACE_COUNT] = {
+        roll - pitch + yaw,
+        -roll - pitch + yaw,
+        roll + pitch + yaw,
+        -roll + pitch + yaw,
+    };
+
+    for (uint8_t i = 0; i < QUADX_CONTROL_SURFACE_COUNT; i++) {
+        const int32_t scaled = constrain(mixed[i], -500, 500) * servoConfig()->quadxServoGain / 100;
+        servo[i] = determineServoMiddleOrForwardFromChannel(i) + (int32_t)servoParams(i)->rate * scaled / 100;
+    }
+}
+#endif
 
 
 static void servoTable(void)
 {
     // airplane / servo mixes
     switch (getMixerMode()) {
+#if MAX_SUPPORTED_SERVOS >= QUADX_CONTROL_SURFACE_COUNT
+    case MIXER_QUADX:
+        if (quadxControlSurfacesEnabled()) {
+            quadxControlSurfaceMixer();
+        }
+        break;
+#endif
+
     case MIXER_CUSTOM_TRI:
     case MIXER_TRI:
         servosTricopterMixer();

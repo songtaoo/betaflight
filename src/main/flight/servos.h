@@ -132,6 +132,8 @@ typedef struct servoConfig_s {
     uint16_t servo_lowpass_freq;            // lowpass servo filter frequency selection; 1/1000ths of loop freq
     uint8_t tri_unarmed_servo;              // send tail servo correction pulses even when unarmed
     uint8_t channelForwardingStartChannel;
+    uint8_t quadxServoEnable;                // enable four control-surface servos in QUADX mode
+    uint8_t quadxServoGain;                  // control-surface authority, percent
 } servoConfig_t;
 
 PG_DECLARE(servoConfig_t, servoConfig);
