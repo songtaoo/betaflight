@@ -134,6 +134,7 @@ typedef struct servoConfig_s {
     uint8_t channelForwardingStartChannel;
     uint8_t quadxServoEnable;                // enable four control-surface servos in QUADX mode
     uint8_t quadxServoGain;                  // control-surface authority, percent
+    uint8_t quadxServoFeedback;              // use gyro/PID feedback instead of RC-only control
 } servoConfig_t;
 
 PG_DECLARE(servoConfig_t, servoConfig);

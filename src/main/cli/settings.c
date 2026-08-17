@@ -975,6 +975,7 @@ const clivalue_t valueTable[] = {
     { "channel_forwarding_start",   VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { AUX1, MAX_SUPPORTED_RC_CHANNEL_COUNT }, PG_SERVO_CONFIG, offsetof(servoConfig_t, channelForwardingStartChannel) },
     { "quadx_servo_enable",         VAR_UINT8  | MASTER_VALUE | MODE_LOOKUP, .config.lookup = { TABLE_OFF_ON }, PG_SERVO_CONFIG, offsetof(servoConfig_t, quadxServoEnable) },
     { "quadx_servo_gain",           VAR_UINT8  | MASTER_VALUE, .config.minmaxUnsigned = { 0, 100 }, PG_SERVO_CONFIG, offsetof(servoConfig_t, quadxServoGain) },
+    { "quadx_servo_feedback",       VAR_UINT8  | MASTER_VALUE | MODE_LOOKUP, .config.lookup = { TABLE_OFF_ON }, PG_SERVO_CONFIG, offsetof(servoConfig_t, quadxServoFeedback) },
 #endif
 
 // PG_CONTROLRATE_PROFILES

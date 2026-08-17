@@ -72,6 +72,7 @@ void pgResetFn_servoConfig(servoConfig_t *servoConfig)
     servoConfig->channelForwardingStartChannel = AUX1;
     servoConfig->quadxServoEnable = 0;
     servoConfig->quadxServoGain = QUADX_SERVO_DEFAULT_GAIN;
+    servoConfig->quadxServoFeedback = 1;
 
 #ifdef SERVO1_PIN
     servoConfig->dev.ioTags[0] = IO_TAG(SERVO1_PIN);
@@ -414,7 +415,7 @@ void writeServos(void)
     case MIXER_QUADX:
         if (quadxControlSurfacesEnabled()) {
             writeQuadxControlSurfaceServos(servoIndex);
-            servoIndex += QUADX_CONTROL_SURFACE_COUNT;
+            return;
         }
         break;
 #endif
@@ -522,9 +523,14 @@ void servoMixer(void)
     }
 }
 #if MAX_SUPPORTED_SERVOS >= QUADX_CONTROL_SURFACE_COUNT
+static int16_t quadxServoRcInput(uint8_t axis)
+{
+    return constrain(rcData[axis] - rxConfig()->midrc, -500, 500);
+}
+
 static int16_t quadxServoGroundTestInput(uint8_t axis)
 {
-    const float rateError = rcCommand[axis] - gyro.gyroADCf[axis] * QUADX_SERVO_GYRO_GROUND_TEST_SCALING;
+    const float rateError = quadxServoRcInput(axis) - gyro.gyroADCf[axis] * QUADX_SERVO_GYRO_GROUND_TEST_SCALING;
     return constrain(lrintf(rateError), -500, 500);
 }
 
@@ -534,7 +540,11 @@ static void quadxControlSurfaceMixer(void)
     int16_t pitch;
     int16_t yaw;
 
-    if (ARMING_FLAG(ARMED)) {
+    if (!servoConfig()->quadxServoFeedback) {
+        roll = quadxServoRcInput(ROLL);
+        pitch = quadxServoRcInput(PITCH);
+        yaw = quadxServoRcInput(YAW);
+    } else if (ARMING_FLAG(ARMED)) {
         roll = constrain(lrintf(pidData[FD_ROLL].Sum * PID_SERVO_MIXER_SCALING), -500, 500);
         pitch = constrain(lrintf(pidData[FD_PITCH].Sum * PID_SERVO_MIXER_SCALING), -500, 500);
         yaw = constrain(lrintf(pidData[FD_YAW].Sum * PID_SERVO_MIXER_SCALING), -500, 500);
