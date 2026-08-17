@@ -525,7 +525,9 @@ void servoMixer(void)
 #if MAX_SUPPORTED_SERVOS >= QUADX_CONTROL_SURFACE_COUNT
 static int16_t quadxServoRcInput(uint8_t axis)
 {
-    return constrain(rcData[axis] - rxConfig()->midrc, -500, 500);
+    const int16_t centeredInput = constrain(rcData[axis] - rxConfig()->midrc, -500, 500);
+
+    return axis == PITCH ? -centeredInput : centeredInput;
 }
 
 static int16_t quadxServoGroundTestInput(uint8_t axis)
@@ -564,7 +566,7 @@ static void quadxControlSurfaceMixer(void)
 
     for (uint8_t i = 0; i < QUADX_CONTROL_SURFACE_COUNT; i++) {
         const int32_t scaled = constrain(mixed[i], -500, 500) * servoConfig()->quadxServoGain / 100;
-        servo[i] = determineServoMiddleOrForwardFromChannel(i) + (int32_t)servoParams(i)->rate * scaled / 100;
+        servo[i] = servoParams(i)->middle + (int32_t)servoParams(i)->rate * scaled / 100;
     }
 }
 #endif
