@@ -38,6 +38,7 @@
 
 #include "drivers/pwm_output.h"
 
+#include "fc/core.h"
 #include "fc/rc_controls.h"
 #include "fc/rc_modes.h"
 #include "fc/runtime_config.h"
@@ -59,9 +60,10 @@
 
 #define QUADX_CONTROL_SURFACE_COUNT 4
 #define QUADX_SERVO_DEFAULT_GAIN 20
+#define QUADX_SERVO_DEFAULT_THROTTLE_THRESHOLD 80
 #define QUADX_SERVO_GYRO_GROUND_TEST_SCALING 1.0f
 
-PG_REGISTER_WITH_RESET_FN(servoConfig_t, servoConfig, PG_SERVO_CONFIG, 1);
+PG_REGISTER_WITH_RESET_FN(servoConfig_t, servoConfig, PG_SERVO_CONFIG, 2);
 
 void pgResetFn_servoConfig(servoConfig_t *servoConfig)
 {
@@ -73,6 +75,7 @@ void pgResetFn_servoConfig(servoConfig_t *servoConfig)
     servoConfig->quadxServoEnable = 0;
     servoConfig->quadxServoGain = QUADX_SERVO_DEFAULT_GAIN;
     servoConfig->quadxServoFeedback = 1;
+    servoConfig->quadxServoThrottleThreshold = QUADX_SERVO_DEFAULT_THROTTLE_THRESHOLD;
 
 #ifdef SERVO1_PIN
     servoConfig->dev.ioTags[0] = IO_TAG(SERVO1_PIN);
@@ -538,6 +541,14 @@ static int16_t quadxServoGroundTestInput(uint8_t axis)
 
 static void quadxControlSurfaceMixer(void)
 {
+    const uint8_t throttleThreshold = servoConfig()->quadxServoThrottleThreshold;
+    if (throttleThreshold > 0 && calculateThrottlePercent() <= throttleThreshold) {
+        for (uint8_t i = 0; i < QUADX_CONTROL_SURFACE_COUNT; i++) {
+            servo[i] = servoParams(i)->middle;
+        }
+        return;
+    }
+
     int16_t roll;
     int16_t pitch;
     int16_t yaw;
