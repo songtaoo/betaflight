@@ -536,6 +536,53 @@ TEST(FlightFailsafeTest, TestFailsafeSwitchModeStage1OrStage2Drop)
 
 /****************************************************************************************/
 
+TEST(FlightFailsafeTest, TestFailsafeSwitchModeStage2Land200Seconds)
+{
+    const int16_t previousOffDelay = failsafeConfig()->failsafe_off_delay;
+    ENABLE_ARMING_FLAG(ARMED);
+    resetCallCounters();
+    failsafeStartMonitoring();
+    throttleStatus = THROTTLE_HIGH;
+    failsafeConfigMutable()->failsafe_switch_mode = FAILSAFE_SWITCH_MODE_STAGE2;
+    failsafeConfigMutable()->failsafe_procedure = FAILSAFE_PROCEDURE_AUTO_LANDING;
+    failsafeConfigMutable()->failsafe_off_delay = 2000;
+    ASSERT_EQ(2000, failsafeConfig()->failsafe_off_delay);
+
+    sysTickUptime = 0;
+    failsafeOnValidDataReceived();
+    sysTickUptime += 3000;
+    failsafeUpdateState();
+    activateBoxFailsafe();
+    failsafeOnValidDataFailed();
+    failsafeUpdateState();
+    ASSERT_EQ(FAILSAFE_LANDING, failsafePhase());
+
+    const uint32_t landingStartedAt = sysTickUptime;
+    const uint32_t elapsedTimes[] = {20000, 25500, 100000, 199999, 200000};
+    for (const uint32_t elapsed : elapsedTimes) {
+        sysTickUptime = landingStartedAt + elapsed;
+        failsafeUpdateState();
+        EXPECT_EQ(FAILSAFE_LANDING, failsafePhase());
+        EXPECT_EQ(0, CALL_COUNTER(COUNTER_MW_DISARM));
+    }
+
+    sysTickUptime = landingStartedAt + 200001;
+    failsafeUpdateState();
+    EXPECT_EQ(FAILSAFE_RX_LOSS_MONITORING, failsafePhase());
+    EXPECT_EQ(1, CALL_COUNTER(COUNTER_MW_DISARM));
+    EXPECT_TRUE(isArmingDisabled());
+
+    // These legacy tests share state; leave the switch and recovery state clean.
+    deactivateBoxFailsafe();
+    sysTickUptime++;
+    failsafeOnValidDataReceived();
+    failsafeUpdateState();
+    EXPECT_EQ(FAILSAFE_IDLE, failsafePhase());
+    EXPECT_FALSE(failsafeIsActive());
+    EXPECT_FALSE(isArmingDisabled());
+    failsafeConfigMutable()->failsafe_off_delay = previousOffDelay;
+}
+
 TEST(FlightFailsafeTest, TestFailsafeSwitchModeStage2Land)
 {
     // given a clean start
