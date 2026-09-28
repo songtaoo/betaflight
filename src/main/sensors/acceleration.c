@@ -56,6 +56,7 @@ void accUpdate(timeUs_t currentTimeUs)
         return;
     }
     acc.isAccelUpdatedAtLeastOnce = true;
+    acc.lastUpdateUs = currentTimeUs;
 
     for (int axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
         const int16_t val =  acc.dev.ADCRaw[axis];

@@ -146,7 +146,9 @@ flight_failsafe_unittest_SRC := \
 		$(USER_DIR)/flight/failsafe.c
 
 flight_failsafe_unittest_DEFINES := \
-		USE_GPS_RESCUE=
+		USE_GPS_RESCUE= \
+		USE_BARO= \
+		USE_ACC=
 
 
 flight_imu_unittest_SRC := \

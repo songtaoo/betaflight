@@ -38,10 +38,14 @@ extern "C" {
     #include "fc/core.h"
 
     #include "flight/failsafe.h"
+    #include "sensors/barometer.h"
+    #include "sensors/acceleration.h"
+    #include "sensors/gyro.h"
 
     #include "io/beeper.h"
 
     #include "drivers/io.h"
+    #include "drivers/time.h"
     #include "rx/rx.h"
 
     extern boxBitmask_t rcModeActivationMask;
@@ -93,6 +97,7 @@ void configureFailsafe(void)
 void activateBoxFailsafe()
 {
     boxBitmask_t newMask;
+    memset(&newMask, 0, sizeof(newMask));
     bitArraySet(&newMask, BOXFAILSAFE);
     rcModeUpdate(&newMask);
 }
@@ -758,9 +763,279 @@ TEST(FlightFailsafeTest, TestFailsafeNotActivatedWhenDisarmedAndRXLossIsDetected
     EXPECT_FALSE(isArmingDisabled());
 }
 
+static bool testBaroReady = true;
+static bool testBaroCalibrated = true;
+
+class LandingDetectionTest : public ::testing::Test {
+protected:
+    void SetUp() override
+    {
+        configureFailsafe();
+        failsafeInit();
+        failsafeReset();
+        deactivateBoxFailsafe();
+        DISABLE_ARMING_FLAG(ARMED);
+        unsetArmingDisabled((armingDisableFlags_e)~0U);
+        sensorsSet(SENSOR_BARO | SENSOR_ACC | SENSOR_GYRO);
+        testBaroReady = testBaroCalibrated = true;
+        memset(&acc, 0, sizeof(acc));
+        memset(&gyro, 0, sizeof(gyro));
+        memset(&baro, 0, sizeof(baro));
+        acc.dev.acc_1G = 2048;
+        acc.accADC[Z] = 2048;
+        acc.isAccelUpdatedAtLeastOnce = true;
+        failsafeConfigMutable()->failsafe_ld_en = true;
+        failsafeConfigMutable()->failsafe_ld_alt = 300;
+        failsafeConfigMutable()->failsafe_ld_ms = 1500;
+        failsafeConfigMutable()->failsafe_off_delay = 2000;
+        failsafeConfigMutable()->failsafe_switch_mode = FAILSAFE_SWITCH_MODE_STAGE2;
+        failsafeStartMonitoring();
+        resetCallCounters();
+        // Establish the disarmed reference, then capture it at the real arming hook.
+        hold(0, 1500);
+        ENABLE_ARMING_FLAG(ARMED);
+        failsafeOnArm();
+        failsafeOnRxResume();
+        hold(1000, 1000);
+        activateBoxFailsafe();
+        failsafeOnValidDataFailed();
+        failsafeUpdateState();
+        ASSERT_EQ(FAILSAFE_LANDING, failsafePhase());
+    }
+
+    void TearDown() override
+    {
+        deactivateBoxFailsafe();
+        failsafeOnRxResume();
+        failsafeUpdateState();
+        DISABLE_ARMING_FLAG(ARMED);
+        failsafeUpdateState();
+        failsafeConfigMutable()->failsafe_ld_en = false;
+    }
+
+    void step(float altitude, bool freshBaro = true, bool freshAcc = true)
+    {
+        sysTickUptime += 10;
+        baro.altitude = altitude;
+        if (freshBaro) {
+            baro.hasAltitudeSample = true;
+            baro.lastAltitudeUpdateUs = micros();
+        }
+        if (freshAcc) {
+            acc.lastUpdateUs = micros();
+        }
+        failsafeUpdateState();
+    }
+
+    void hold(float altitude, unsigned duration)
+    {
+        for (unsigned t = 0; t < duration; t += 10) {
+            step(altitude);
+        }
+    }
+
+    void descend(float endAltitude = 0)
+    {
+        // 1 m/s from 10m above the arming reference.
+        for (float altitude = 1000; altitude > endAltitude; altitude -= 1) {
+            step(altitude);
+        }
+        EXPECT_EQ(0, CALL_COUNTER(COUNTER_MW_DISARM));
+    }
+};
+
+TEST_F(LandingDetectionTest, DescendThenSettleDisarmsBeforeTimeout)
+{
+    descend();
+    hold(0, 1000);
+    EXPECT_EQ(0, CALL_COUNTER(COUNTER_MW_DISARM));
+    hold(0, 4000);
+    EXPECT_EQ(1, CALL_COUNTER(COUNTER_MW_DISARM));
+    EXPECT_EQ(FAILSAFE_RX_LOSS_MONITORING, failsafePhase());
+}
+
+TEST_F(LandingDetectionTest, DisabledRetainsTimeout)
+{
+    failsafeConfigMutable()->failsafe_ld_en = false;
+    descend();
+    hold(0, 5000);
+    EXPECT_EQ(0, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
+TEST_F(LandingDetectionTest, NoDescentCannotDisarm)
+{
+    failsafeConfigMutable()->failsafe_ld_alt = 0;
+    hold(1000, 8000);
+    EXPECT_EQ(0, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
+TEST_F(LandingDetectionTest, AltitudeOutsideToleranceCannotDisarm)
+{
+    descend(500);
+    hold(500, 5000);
+    EXPECT_EQ(0, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
+TEST_F(LandingDetectionTest, ZeroToleranceDisablesOnlyAltitudeGate)
+{
+    failsafeConfigMutable()->failsafe_ld_alt = 0;
+    descend(500);
+    gyro.gyroADCf[X] = 40;
+    hold(500, 5000);
+    EXPECT_EQ(0, CALL_COUNTER(COUNTER_MW_DISARM));
+    gyro.gyroADCf[X] = 0;
+    hold(500, 2000);
+    EXPECT_EQ(1, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
+TEST_F(LandingDetectionTest, FiftyMetreToleranceAccepted)
+{
+    failsafeConfigMutable()->failsafe_ld_alt = 5000;
+    descend(500);
+    hold(500, 5000);
+    EXPECT_EQ(1, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
+TEST_F(LandingDetectionTest, AccelerationMotionPreventsDisarm)
+{
+    descend();
+    acc.accADC[Z] = 3000;
+    hold(0, 5000);
+    EXPECT_EQ(0, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
+TEST_F(LandingDetectionTest, StaleBaroCannotDisarm)
+{
+    descend();
+    for (unsigned t = 0; t < 5000; t += 10) {
+        step(0, false);
+    }
+    EXPECT_EQ(0, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
+TEST_F(LandingDetectionTest, StaleAccelerometerCannotDisarm)
+{
+    descend();
+    for (unsigned t = 0; t < 5000; t += 10) {
+        step(0, true, false);
+    }
+    EXPECT_EQ(0, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
+TEST_F(LandingDetectionTest, MissingBarometerCannotDisarm)
+{
+    descend();
+    sensorsClear(SENSOR_BARO);
+    hold(0, 5000);
+    EXPECT_EQ(0, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
+TEST_F(LandingDetectionTest, ConfirmationDurationHonoured)
+{
+    failsafeConfigMutable()->failsafe_ld_ms = 5000;
+    descend();
+    hold(0, 5000);
+    EXPECT_EQ(0, CALL_COUNTER(COUNTER_MW_DISARM));
+    hold(0, 3000);
+    EXPECT_EQ(1, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
+TEST_F(LandingDetectionTest, MotionRestartsConfirmation)
+{
+    failsafeConfigMutable()->failsafe_ld_ms = 5000;
+    descend();
+    hold(0, 4500);
+    gyro.gyroADCf[Z] = 50;
+    step(0);
+    gyro.gyroADCf[Z] = 0;
+    hold(0, 4000);
+    EXPECT_EQ(0, CALL_COUNTER(COUNTER_MW_DISARM));
+    hold(0, 2000);
+    EXPECT_EQ(1, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
+TEST_F(LandingDetectionTest, ExitAndReenterRequiresNewDescent)
+{
+    descend();
+    deactivateBoxFailsafe();
+    failsafeOnRxResume();
+    step(0);
+    hold(0, 100);
+    activateBoxFailsafe();
+    failsafeOnValidDataFailed();
+    hold(0, 6000);
+    EXPECT_EQ(0, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
+TEST_F(LandingDetectionTest, RearmingCapturesNewAltitudeReference)
+{
+    deactivateBoxFailsafe();
+    failsafeOnRxResume();
+    step(2000);
+    DISABLE_ARMING_FLAG(ARMED);
+    hold(2000, 3000);
+    ENABLE_ARMING_FLAG(ARMED);
+    failsafeOnArm();
+    hold(3000, 1000);
+    activateBoxFailsafe();
+    failsafeOnValidDataFailed();
+    step(3000);
+    for (float altitude = 3000; altitude > 2000; altitude -= 1) {
+        step(altitude);
+    }
+    hold(2000, 5000);
+    EXPECT_EQ(1, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
+TEST_F(LandingDetectionTest, MissingArmingReferenceBlocksAltitudeGate)
+{
+    // A second arming call without a disarmed baseline must invalidate the old one.
+    failsafeOnArm();
+    descend();
+    hold(0, 5000);
+    EXPECT_EQ(0, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
+TEST_F(LandingDetectionTest, ZeroToleranceDoesNotRequireArmingReference)
+{
+    failsafeOnArm();
+    failsafeConfigMutable()->failsafe_ld_alt = 0;
+    descend();
+    hold(0, 5000);
+    EXPECT_EQ(1, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
+TEST_F(LandingDetectionTest, BelowReferenceOutsideToleranceCannotDisarm)
+{
+    descend(-500);
+    hold(-500, 5000);
+    EXPECT_EQ(0, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
+TEST_F(LandingDetectionTest, MissingAccelerometerCannotDisarm)
+{
+    descend();
+    sensorsClear(SENSOR_ACC);
+    hold(0, 5000);
+    EXPECT_EQ(0, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
+TEST_F(LandingDetectionTest, TimeoutStillDisarmsWhenAltitudeGateFails)
+{
+    hold(1000, 200100);
+    EXPECT_EQ(1, CALL_COUNTER(COUNTER_MW_DISARM));
+}
+
 // STUBS
 
 extern "C" {
+baro_t baro;
+acc_t acc;
+gyro_t gyro;
+bool isBaroReady(void) { return testBaroReady; }
+bool baroIsCalibrated(void) { return testBaroCalibrated; }
+float getBaroAltitude(void) { return baro.altitude; }
+bool accIsCalibrationComplete(void) { return true; }
 float rcData[MAX_SUPPORTED_RC_CHANNEL_COUNT];
 float rcCommand[4];
 int16_t debug[DEBUG16_VALUE_COUNT];

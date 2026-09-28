@@ -557,6 +557,7 @@ void tryArm(void)
         mixerResetRpmLimiter();
 #endif
         ENABLE_ARMING_FLAG(ARMED);
+        failsafeOnArm();
 
 #ifdef USE_RC_STATS
         NotifyRcStatsArming();

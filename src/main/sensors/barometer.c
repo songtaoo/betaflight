@@ -359,6 +359,7 @@ bool baroIsCalibrated(void)
 
 void baroStartCalibration(void)
 {
+    baro.hasAltitudeSample = false;
     baroGroundAltitude = 0;
     baroCalibrated = false;
     calibrationCycles = NUM_CALIBRATION_CYCLES;
@@ -367,6 +368,7 @@ void baroStartCalibration(void)
 
 void baroSetGroundLevel(void)
 {
+    baro.hasAltitudeSample = false;
     baroGroundAltitude = 0;
     baroCalibrated = false;
     calibrationCycles = NUM_GROUND_LEVEL_CYCLES;
@@ -469,6 +471,8 @@ uint32_t baroUpdate(timeUs_t currentTimeUs)
                 if (baroIsCalibrated()) {
                     // zero baro altitude
                     baro.altitude = altitude - baroGroundAltitude;
+                    baro.lastAltitudeUpdateUs = currentTimeUs;
+                    baro.hasAltitudeSample = true;
                 } else {
                     // establish stable baroGroundAltitude value to zero baro altitude with
                     performBaroCalibrationCycle(altitude);

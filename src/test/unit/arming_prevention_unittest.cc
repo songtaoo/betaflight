@@ -1081,6 +1081,7 @@ extern "C" {
     void updateRSSI(timeUs_t) {}
     bool failsafeIsMonitoring(void) { return false; }
     void failsafeStartMonitoring(void) {}
+    void failsafeOnArm(void) {}
     void failsafeUpdateState(void) {}
     bool failsafeIsActive(void) { return false; }
     bool failsafeIsReceivingRxData(void) { return true; }

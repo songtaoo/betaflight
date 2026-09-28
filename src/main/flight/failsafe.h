@@ -40,6 +40,9 @@ typedef struct failsafeConfig_s {
     uint8_t failsafe_procedure;             // selected full failsafe procedure is 0: auto-landing, 1: Drop it
     uint16_t failsafe_recovery_delay;       // Time (in 0.1sec) of valid rx data (min 100ms PERIOD_RXDATA_RECOVERY) to allow recovering from failsafe procedure
     uint8_t failsafe_stick_threshold;       // Stick deflection percentage to exit GPS Rescue procedure
+    uint8_t failsafe_ld_en;                // Enable AUTO-LAND landing detection.
+    uint16_t failsafe_ld_alt;              // Arming altitude tolerance in cm, 0 disables this gate.
+    uint16_t failsafe_ld_ms;               // Continuous landing confirmation time in ms.
 } failsafeConfig_t;
 
 PG_DECLARE(failsafeConfig_t, failsafeConfig);
@@ -95,6 +98,7 @@ typedef struct failsafeState_s {
 
 void failsafeInit(void);
 void failsafeReset(void);
+void failsafeOnArm(void);
 
 void failsafeStartMonitoring(void);
 void failsafeUpdateState(void);

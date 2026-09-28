@@ -20,6 +20,8 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <math.h>
+#include <string.h>
 
 #include "platform.h"
 
@@ -47,6 +49,12 @@
 
 #include "flight/pid.h"
 
+#if defined(USE_BARO) && defined(USE_ACC)
+#include "sensors/barometer.h"
+#include "sensors/acceleration.h"
+#include "sensors/gyro.h"
+#endif
+
 /*
  * Usage:
  *
@@ -60,7 +68,7 @@
 
 static failsafeState_t failsafeState;
 
-PG_REGISTER_WITH_RESET_TEMPLATE(failsafeConfig_t, failsafeConfig, PG_FAILSAFE_CONFIG, 3);
+PG_REGISTER_WITH_RESET_TEMPLATE(failsafeConfig_t, failsafeConfig, PG_FAILSAFE_CONFIG, 4);
 
 #ifdef USE_RACE_PRO
 #define DEFAULT_FAILSAFE_RECOVERY_DELAY 1            // 100ms of valid rx data needed to allow recovery from failsafe and arming block
@@ -76,7 +84,10 @@ PG_RESET_TEMPLATE(failsafeConfig_t, failsafeConfig,
     .failsafe_switch_mode = FAILSAFE_SWITCH_MODE_STAGE1, // default failsafe switch action is identical to rc link loss
     .failsafe_procedure = FAILSAFE_PROCEDURE_DROP_IT,    // default full failsafe procedure is 0: auto-landing
     .failsafe_recovery_delay = DEFAULT_FAILSAFE_RECOVERY_DELAY,
-    .failsafe_stick_threshold = 30                       // 30 percent of stick deflection to exit GPS Rescue procedure
+    .failsafe_stick_threshold = 30,                      // 30 percent of stick deflection to exit GPS Rescue procedure
+    .failsafe_ld_en = false,
+    .failsafe_ld_alt = 300,                              // +/- 3m; zero disables only the altitude gate
+    .failsafe_ld_ms = 1500
 );
 
 const char * const failsafeProcedureNames[FAILSAFE_PROCEDURE_COUNT] = {
@@ -87,11 +98,213 @@ const char * const failsafeProcedureNames[FAILSAFE_PROCEDURE_COUNT] = {
 #endif
 };
 
+#if defined(USE_BARO) && defined(USE_ACC)
+// Initial conservative thresholds; validate against the airframe's landing logs.
+#define LAND_SAMPLE_MS 100
+#define LAND_WINDOW_SAMPLES 11                         // One second of barometric history
+#define LAND_DESCENT_CMS 50.0f
+#define LAND_DESCENT_MS 1000
+#define LAND_STILL_CMS 25.0f
+#define LAND_ALT_RANGE_CM 30.0f
+#define LAND_GYRO_DPS 15.0f
+#define LAND_ACC_MIN_G 0.85f
+#define LAND_ACC_MAX_G 1.15f
+#define LAND_ACC_CHANGE_G 0.10f
+#define LAND_BARO_MAX_AGE_US 300000
+#define LAND_ACC_MAX_AGE_US 100000
+
+static struct {
+    bool groundValid;
+    bool groundReady;
+    bool armValid;
+    float groundAltitude;
+    float armAltitude;
+    timeMs_t groundSince;
+    timeMs_t groundLast;
+} landingReference;
+
+static struct {
+    bool initialized;
+    bool descending;
+    bool descentSeen;
+    bool confirming;
+    bool imuValid;
+    timeMs_t lastUpdate;
+    timeMs_t lastSample;
+    timeMs_t descentSince;
+    timeMs_t confirmSince;
+    float altitude;
+    float previousAccG;
+    float history[LAND_WINDOW_SAMPLES];
+    timeMs_t historyTime[LAND_WINDOW_SAMPLES];
+    unsigned index;
+    unsigned count;
+} landingDetector;
+
+static bool landingBaroValid(void)
+{
+    return sensors(SENSOR_BARO) && isBaroReady() && baroIsCalibrated()
+        && baro.hasAltitudeSample
+        && (timeUs_t)(micros() - baro.lastAltitudeUpdateUs) <= LAND_BARO_MAX_AGE_US
+        && isfinite(getBaroAltitude());
+}
+
+static void landingReset(void)
+{
+    memset(&landingDetector, 0, sizeof(landingDetector));
+}
+
+// Track a smoothed baseline only while disarmed; never learn a new baseline in flight.
+static void landingUpdateGroundReference(void)
+{
+    landingReset();
+    landingReference.armValid = false;
+    if (!failsafeConfig()->failsafe_ld_en || !landingBaroValid()) {
+        landingReference.groundValid = false;
+        landingReference.groundReady = false;
+        return;
+    }
+    const timeMs_t now = millis();
+    const float altitude = getBaroAltitude();
+    const timeMs_t elapsed = now - landingReference.groundLast;
+    if (!landingReference.groundValid || elapsed > 100) {
+        landingReference.groundAltitude = altitude;
+        landingReference.groundSince = now;
+        landingReference.groundReady = false;
+    } else {
+        landingReference.groundAltitude += (float)elapsed / (250.0f + elapsed)
+            * (altitude - landingReference.groundAltitude);
+        landingReference.groundReady = now - landingReference.groundSince >= 1000;
+    }
+    landingReference.groundLast = now;
+    landingReference.groundValid = true;
+}
+
+static bool failsafeLandingDetected(void)
+{
+    const timeMs_t now = millis();
+    if (!failsafeConfig()->failsafe_ld_en || !landingBaroValid()
+        || !sensors(SENSOR_ACC) || !sensors(SENSOR_GYRO)
+        || !acc.isAccelUpdatedAtLeastOnce || !accIsCalibrationComplete()
+        || acc.dev.acc_1G == 0
+        || (timeUs_t)(micros() - acc.lastUpdateUs) > LAND_ACC_MAX_AGE_US
+        || (failsafeConfig()->failsafe_ld_alt && !landingReference.armValid)) {
+        landingReset();
+        return false;
+    }
+
+    float accSquared = 0;
+    bool imuStable = true;
+    for (unsigned axis = 0; axis < XYZ_AXIS_COUNT; axis++) {
+        if (!isfinite(acc.accADC[axis]) || !isfinite(gyro.gyroADCf[axis])) {
+            landingReset();
+            return false;
+        }
+        const float accG = acc.accADC[axis] / acc.dev.acc_1G;
+        accSquared += accG * accG;
+        imuStable = imuStable && fabsf(gyro.gyroADCf[axis]) <= LAND_GYRO_DPS;
+    }
+    const float accG = sqrtf(accSquared);
+    imuStable = imuStable && accG >= LAND_ACC_MIN_G && accG <= LAND_ACC_MAX_G
+        && landingDetector.imuValid
+        && fabsf(accG - landingDetector.previousAccG) <= LAND_ACC_CHANGE_G;
+
+    if (!landingDetector.initialized || now - landingDetector.lastUpdate > 100) {
+        landingReset();
+        landingDetector.initialized = true;
+        landingDetector.altitude = getBaroAltitude();
+        landingDetector.lastUpdate = now;
+        landingDetector.lastSample = now;
+        landingDetector.previousAccG = accG;
+        landingDetector.imuValid = true;
+        return false;
+    }
+    const timeMs_t elapsed = now - landingDetector.lastUpdate;
+    landingDetector.lastUpdate = now;
+    landingDetector.previousAccG = accG;
+    landingDetector.imuValid = true;
+    landingDetector.altitude += (float)elapsed / (250.0f + elapsed)
+        * (getBaroAltitude() - landingDetector.altitude);
+    // Check IMU at every failsafe update, not only at the barometric window rate.
+    if (!imuStable) {
+        landingDetector.confirming = false;
+    }
+    if (now - landingDetector.lastSample < LAND_SAMPLE_MS) {
+        return false;
+    }
+    // Do not interpret an irregularly sampled window as one second of history.
+    if (now - landingDetector.lastSample > LAND_SAMPLE_MS + 50) {
+        landingReset();
+        return false;
+    }
+    landingDetector.lastSample = now;
+    landingDetector.history[landingDetector.index] = landingDetector.altitude;
+    landingDetector.historyTime[landingDetector.index] = now;
+    landingDetector.index = (landingDetector.index + 1) % LAND_WINDOW_SAMPLES;
+    if (landingDetector.count < LAND_WINDOW_SAMPLES) {
+        landingDetector.count++;
+    }
+    if (landingDetector.count < LAND_WINDOW_SAMPLES) {
+        return false;
+    }
+    const float velocity = (landingDetector.altitude - landingDetector.history[landingDetector.index])
+        * 1000.0f / (now - landingDetector.historyTime[landingDetector.index]);
+    if (velocity < -LAND_DESCENT_CMS) {
+        if (!landingDetector.descending) {
+            landingDetector.descending = true;
+            landingDetector.descentSince = now;
+        }
+        if (now - landingDetector.descentSince >= LAND_DESCENT_MS) {
+            landingDetector.descentSeen = true;
+        }
+    } else {
+        landingDetector.descending = false;
+    }
+
+    float low = landingDetector.altitude;
+    float high = low;
+    for (unsigned i = 0; i < LAND_WINDOW_SAMPLES; i++) {
+        low = fminf(low, landingDetector.history[i]);
+        high = fmaxf(high, landingDetector.history[i]);
+    }
+    const bool altitudeAllowed = failsafeConfig()->failsafe_ld_alt == 0
+        || fabsf(landingDetector.altitude - landingReference.armAltitude) <= failsafeConfig()->failsafe_ld_alt;
+    const bool candidate = landingDetector.descentSeen && altitudeAllowed && imuStable
+        && fabsf(velocity) <= LAND_STILL_CMS && high - low <= LAND_ALT_RANGE_CM;
+    if (!candidate) {
+        landingDetector.confirming = false;
+        return false;
+    }
+    if (!landingDetector.confirming) {
+        landingDetector.confirming = true;
+        landingDetector.confirmSince = now;
+    }
+    return now - landingDetector.confirmSince >= failsafeConfig()->failsafe_ld_ms;
+}
+#endif
+
+void failsafeOnArm(void)
+{
+#if defined(USE_BARO) && defined(USE_ACC)
+    landingReset();
+    landingReference.armValid = failsafeConfig()->failsafe_ld_en
+        && landingReference.groundValid && landingReference.groundReady && landingBaroValid()
+        && millis() - landingReference.groundLast <= 100;
+    landingReference.armAltitude = landingReference.groundAltitude;
+    landingReference.groundValid = false;
+    landingReference.groundReady = false;
+#endif
+}
+
 /*
  * Should called when the failsafe config needs to be changed - e.g. a different profile has been selected.
  */
 void failsafeReset(void)
 {
+#if defined(USE_BARO) && defined(USE_ACC)
+    landingReset();
+    memset(&landingReference, 0, sizeof(landingReference));
+#endif
     failsafeState.rxDataFailurePeriod = failsafeConfig()->failsafe_delay * MILLIS_PER_TENTH_SECOND;
     if (failsafeState.rxDataFailurePeriod < PERIOD_RXDATA_RECOVERY){
         // avoid transients and ensure reliable arming for minimum of PERIOD_RXDATA_RECOVERY (100ms)
@@ -227,6 +440,13 @@ uint32_t failsafeFailurePeriodMs(void)
 FAST_CODE_NOINLINE void failsafeUpdateState(void)
 // triggered directly, and ONLY, by the scheduler, at 10ms = PERIOD_RXDATA_FAILURE - intervals
 {
+#if defined(USE_BARO) && defined(USE_ACC)
+    if (!ARMING_FLAG(ARMED)) {
+        landingUpdateGroundReference();
+    } else if (failsafeState.phase != FAILSAFE_LANDING) {
+        landingReset();
+    }
+#endif
     if (!failsafeIsMonitoring()) {
         return;
     }
@@ -353,7 +573,11 @@ FAST_CODE_NOINLINE void failsafeUpdateState(void)
                     if (armed) {
                         beeperMode = BEEPER_RX_LOST_LANDING;
                     }
-                    if (failsafeShouldHaveCausedLandingByNow() || crashRecoveryModeActive() || !armed) {
+                    if (failsafeShouldHaveCausedLandingByNow() || crashRecoveryModeActive() || !armed
+#if defined(USE_BARO) && defined(USE_ACC)
+                        || failsafeLandingDetected()
+#endif
+                    ) {
                         // to manually disarm while Landing, aux channels must be enabled
                         // note also that disarming via arm box must be possible during failsafe in rc_controls.c
                         // this should be blocked during signal not received periods, to avoid false disarms
