@@ -22,7 +22,9 @@
 
 #include <stdint.h>
 
-#define DEBUG16_VALUE_COUNT 8
+#define DEBUG16_VALUE_COUNT 12
+// Keep the existing MSP_DEBUG payload length for configurator compatibility.
+#define DEBUG16_MSP_VALUE_COUNT 8
 extern int16_t debug[DEBUG16_VALUE_COUNT];
 extern uint8_t debugMode;
 
@@ -119,6 +121,7 @@ typedef enum {
     DEBUG_MAG_CALIB,
     DEBUG_MAG_TASK_RATE,
     DEBUG_EZLANDING,
+    DEBUG_QUADX_SERVO,
     DEBUG_COUNT
 } debugType_e;
 

@@ -134,11 +134,19 @@ typedef struct servoConfig_s {
     uint8_t channelForwardingStartChannel;
     uint8_t quadxServoEnable;                // enable four control-surface servos in QUADX mode
     uint8_t quadxServoGain;                  // control-surface authority, percent
-    uint8_t quadxServoFeedback;              // use gyro/PID feedback instead of RC-only control
+    uint8_t quadxServoFeedback;              // reserved for stored-config compatibility; QUADX surfaces use RC-only control
     uint8_t quadxServoThrottleThreshold;     // minimum throttle percent required for control-surface output
 } servoConfig_t;
 
 PG_DECLARE(servoConfig_t, servoConfig);
+
+typedef struct quadxServoSpeedConfig_s {
+    uint8_t speedCompensationEnable;         // apply speed-based reduction to QUADX surface PWM
+    uint8_t minSpeedMps;                     // speed floor used by the QUADX servo speed curve, in m/s
+    uint8_t gpsFallbackSpeedMps;             // reference speed used when GPS speed is invalid, in m/s
+} quadxServoSpeedConfig_t;
+
+PG_DECLARE(quadxServoSpeedConfig_t, quadxServoSpeedConfig);
 
 typedef struct servoProfile_s {
     servoParam_t servoConf[MAX_SUPPORTED_SERVOS];

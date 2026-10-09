@@ -28,6 +28,7 @@
 #ifdef USE_SERVOS
 
 #include "build/build_config.h"
+#include "build/debug.h"
 
 #include "common/filter.h"
 #include "common/maths.h"
@@ -42,6 +43,10 @@
 #include "fc/rc_controls.h"
 #include "fc/rc_modes.h"
 #include "fc/runtime_config.h"
+
+#ifdef USE_GPS
+#include "io/gps.h"
+#endif
 
 #include "flight/imu.h"
 #include "flight/mixer.h"
@@ -61,9 +66,17 @@
 #define QUADX_CONTROL_SURFACE_COUNT 4
 #define QUADX_SERVO_DEFAULT_GAIN 20
 #define QUADX_SERVO_DEFAULT_THROTTLE_THRESHOLD 80
-#define QUADX_SERVO_GYRO_GROUND_TEST_SCALING 1.0f
+#define QUADX_SERVO_DEFAULT_MIN_SPEED_MPS 10
 
 PG_REGISTER_WITH_RESET_FN(servoConfig_t, servoConfig, PG_SERVO_CONFIG, 2);
+PG_REGISTER_WITH_RESET_FN(quadxServoSpeedConfig_t, quadxServoSpeedConfig, PG_QUADX_SERVO_SPEED_CONFIG, 1);
+
+void pgResetFn_quadxServoSpeedConfig(quadxServoSpeedConfig_t *config)
+{
+    config->speedCompensationEnable = 0;
+    config->minSpeedMps = QUADX_SERVO_DEFAULT_MIN_SPEED_MPS;
+    config->gpsFallbackSpeedMps = QUADX_SERVO_DEFAULT_MIN_SPEED_MPS;
+}
 
 void pgResetFn_servoConfig(servoConfig_t *servoConfig)
 {
@@ -74,7 +87,7 @@ void pgResetFn_servoConfig(servoConfig_t *servoConfig)
     servoConfig->channelForwardingStartChannel = AUX1;
     servoConfig->quadxServoEnable = 0;
     servoConfig->quadxServoGain = QUADX_SERVO_DEFAULT_GAIN;
-    servoConfig->quadxServoFeedback = 1;
+    servoConfig->quadxServoFeedback = 0;
     servoConfig->quadxServoThrottleThreshold = QUADX_SERVO_DEFAULT_THROTTLE_THRESHOLD;
 
 #ifdef SERVO1_PIN
@@ -353,6 +366,11 @@ static void updateGimbalServos(uint8_t firstServoIndex)
 static void writeQuadxControlSurfaceServos(uint8_t firstServoIndex)
 {
     for (uint8_t i = 0; i < QUADX_CONTROL_SURFACE_COUNT; i++) {
+        DEBUG_SET(DEBUG_QUADX_SERVO, i, servo[i]);
+        // Estimated surface angle in centidegrees: 1000/1500/2000 us -> -45/0/+45 degrees.
+        // Use the final limited/filtered PWM; this estimate never enters the control path.
+        DEBUG_SET(DEBUG_QUADX_SERVO, QUADX_CONTROL_SURFACE_COUNT + i,
+            (constrain(servo[i], 1000, 2000) - 1500) * 9);
         writeServoWithTracking(firstServoIndex + i, i);
     }
 }
@@ -533,14 +551,35 @@ static int16_t quadxServoRcInput(uint8_t axis)
     return axis == PITCH ? -centeredInput : centeredInput;
 }
 
-static int16_t quadxServoGroundTestInput(uint8_t axis)
-{
-    const float rateError = quadxServoRcInput(axis) - gyro.gyroADCf[axis] * QUADX_SERVO_GYRO_GROUND_TEST_SCALING;
-    return constrain(lrintf(rateError), -500, 500);
-}
-
 static void quadxControlSurfaceMixer(void)
 {
+    bool gpsSpeedValid = false;
+    float gpsSpeedMps = 0.0f;
+#ifdef USE_GPS
+    gpsSpeedValid = STATE(GPS_FIX) && gpsIsHealthy();
+    if (gpsSpeedValid) {
+        gpsSpeedMps = gpsSol.groundSpeed / 100.0f;
+    }
+#endif
+
+    const float minSpeedMps = MAX(quadxServoSpeedConfig()->minSpeedMps, 1);
+    const float fallbackSpeedMps = MAX(quadxServoSpeedConfig()->gpsFallbackSpeedMps, 1);
+    const float speedInputMps = gpsSpeedValid ? gpsSpeedMps : fallbackSpeedMps;
+    const float effectiveSpeedMps = fmaxf(speedInputMps, minSpeedMps);
+    const bool speedCompensationEnabled = quadxServoSpeedConfig()->speedCompensationEnable;
+    float speedGain = 1.0f;
+    if (speedCompensationEnabled) {
+        const float speedRatio = minSpeedMps / effectiveSpeedMps;
+        speedGain = speedRatio * speedRatio;
+    }
+
+    // debug[0..3]: final PWM, debug[4..7]: estimated angles (centidegrees).
+    // debug[8..11]: GPS speed (cm/s), effective speed (cm/s), gain * 10000, GPS validity.
+    DEBUG_SET(DEBUG_QUADX_SERVO, 8, constrain(lrintf(gpsSpeedMps * 100.0f), 0, INT16_MAX));
+    DEBUG_SET(DEBUG_QUADX_SERVO, 9, constrain(lrintf(effectiveSpeedMps * 100.0f), 0, INT16_MAX));
+    DEBUG_SET(DEBUG_QUADX_SERVO, 10, lrintf(speedGain * 10000.0f));
+    DEBUG_SET(DEBUG_QUADX_SERVO, 11, gpsSpeedValid ? 1 : 0);
+
     const uint8_t throttleThreshold = servoConfig()->quadxServoThrottleThreshold;
     if (throttleThreshold > 0 && calculateThrottlePercent() <= throttleThreshold) {
         for (uint8_t i = 0; i < QUADX_CONTROL_SURFACE_COUNT; i++) {
@@ -549,24 +588,9 @@ static void quadxControlSurfaceMixer(void)
         return;
     }
 
-    int16_t roll;
-    int16_t pitch;
-    int16_t yaw;
-
-    if (!servoConfig()->quadxServoFeedback) {
-        roll = quadxServoRcInput(ROLL);
-        pitch = quadxServoRcInput(PITCH);
-        yaw = quadxServoRcInput(YAW);
-    } else if (ARMING_FLAG(ARMED)) {
-        roll = constrain(lrintf(pidData[FD_ROLL].Sum * PID_SERVO_MIXER_SCALING), -500, 500);
-        pitch = constrain(lrintf(pidData[FD_PITCH].Sum * PID_SERVO_MIXER_SCALING), -500, 500);
-        yaw = constrain(lrintf(pidData[FD_YAW].Sum * PID_SERVO_MIXER_SCALING), -500, 500);
-    } else {
-        // Keep the motors disarmed while allowing stick and gyro direction checks on the bench.
-        roll = quadxServoGroundTestInput(ROLL);
-        pitch = quadxServoGroundTestInput(PITCH);
-        yaw = quadxServoGroundTestInput(YAW);
-    }
+    const int16_t roll = quadxServoRcInput(ROLL);
+    const int16_t pitch = quadxServoRcInput(PITCH);
+    const int16_t yaw = quadxServoRcInput(YAW);
 
     const int32_t mixed[QUADX_CONTROL_SURFACE_COUNT] = {
         roll - pitch + yaw,
@@ -576,8 +600,17 @@ static void quadxControlSurfaceMixer(void)
     };
 
     for (uint8_t i = 0; i < QUADX_CONTROL_SURFACE_COUNT; i++) {
-        const int32_t scaled = constrain(mixed[i], -500, 500) * servoConfig()->quadxServoGain / 100;
-        servo[i] = servoParams(i)->middle + (int32_t)servoParams(i)->rate * scaled / 100;
+        const int32_t limitedMix = constrain(mixed[i], -500, 500);
+        if (speedCompensationEnabled) {
+            // Keep fractional PWM authority until the final pulse-width rounding.
+            const float pwmOffset = limitedMix * servoConfig()->quadxServoGain * servoParams(i)->rate / 10000.0f;
+            servo[i] = servoParams(i)->middle + (int32_t)lrintf(pwmOffset * speedGain);
+        } else {
+            // Preserve the original PWM calculation when speed scheduling is disabled.
+            const int32_t scaled = limitedMix * servoConfig()->quadxServoGain / 100;
+            const int32_t pwmOffset = (int32_t)servoParams(i)->rate * scaled / 100;
+            servo[i] = servoParams(i)->middle + pwmOffset;
+        }
     }
 }
 #endif
@@ -621,8 +654,8 @@ static void servoTable(void)
         break;
     }
 
-    // camera stabilization
-    if (featureIsEnabled(FEATURE_SERVO_TILT)) {
+    // QUADX control surfaces own servo slots 0-3, including the two gimbal slots.
+    if (!quadxControlSurfacesEnabled() && featureIsEnabled(FEATURE_SERVO_TILT)) {
         // center at fixed position, or vary either pitch or roll by RC channel
         servo[SERVO_GIMBAL_PITCH] = determineServoMiddleOrForwardFromChannel(SERVO_GIMBAL_PITCH);
         servo[SERVO_GIMBAL_ROLL] = determineServoMiddleOrForwardFromChannel(SERVO_GIMBAL_ROLL);
