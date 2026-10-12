@@ -590,13 +590,13 @@ static void quadxControlSurfaceMixer(void)
 
     const int16_t roll = quadxServoRcInput(ROLL);
     const int16_t pitch = quadxServoRcInput(PITCH);
-    const int16_t yaw = quadxServoRcInput(YAW);
 
+    // Auxiliary surfaces follow roll and pitch only; motors retain yaw control.
     const int32_t mixed[QUADX_CONTROL_SURFACE_COUNT] = {
-        roll - pitch + yaw,
-        -roll - pitch + yaw,
-        roll + pitch + yaw,
-        -roll + pitch + yaw,
+        roll - pitch,
+        -roll - pitch,
+        roll + pitch,
+        -roll + pitch,
     };
 
     for (uint8_t i = 0; i < QUADX_CONTROL_SURFACE_COUNT; i++) {
