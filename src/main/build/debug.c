@@ -117,5 +117,4 @@ const char * const debugModeNames[DEBUG_COUNT] = {
     "MAG_CALIB",
     "MAG_TASK_RATE",
     "EZLANDING",
-    "QUADX_SERVO",
 };

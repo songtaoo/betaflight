@@ -243,10 +243,22 @@ static const blackboxDeltaFieldDefinition_t blackboxMainFields[] = {
     {"debug",       5, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2),     .Pencode = ENCODING(SIGNED_VB), CONDITION(DEBUG_LOG)},
     {"debug",       6, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2),     .Pencode = ENCODING(SIGNED_VB), CONDITION(DEBUG_LOG)},
     {"debug",       7, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2),     .Pencode = ENCODING(SIGNED_VB), CONDITION(DEBUG_LOG)},
-    {"debug",       8, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2),     .Pencode = ENCODING(SIGNED_VB), CONDITION(DEBUG_LOG)},
-    {"debug",       9, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2),     .Pencode = ENCODING(SIGNED_VB), CONDITION(DEBUG_LOG)},
-    {"debug",      10, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2),     .Pencode = ENCODING(SIGNED_VB), CONDITION(DEBUG_LOG)},
-    {"debug",      11, SIGNED,   .Ipredict = PREDICT(0),       .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2),     .Pencode = ENCODING(SIGNED_VB), CONDITION(DEBUG_LOG)},
+    {"quadxServoPWM",   0, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"quadxServoPWM",   1, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"quadxServoPWM",   2, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"quadxServoPWM",   3, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"quadxServoAngle", 0, SIGNED,   .Ipredict = PREDICT(0),    .Iencode = ENCODING(SIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"quadxServoAngle", 1, SIGNED,   .Ipredict = PREDICT(0),    .Iencode = ENCODING(SIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"quadxServoAngle", 2, SIGNED,   .Ipredict = PREDICT(0),    .Iencode = ENCODING(SIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"quadxServoAngle", 3, SIGNED,   .Ipredict = PREDICT(0),    .Iencode = ENCODING(SIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"rcAux",           0, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"rcAux",           1, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"rcAux",           2, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"rcAux",           3, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"rcAux",           4, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"rcAux",           5, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"rcAux",           6, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"rcAux",           7, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
     /* Motors only rarely drops under minthrottle (when stick falls below mincommand), so predict minthrottle for it and use *unsigned* encoding (which is large for negative numbers but more compact for positive ones): */
     {"motor",       0, UNSIGNED, .Ipredict = PREDICT(MINMOTOR), .Iencode = ENCODING(UNSIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(AT_LEAST_MOTORS_1)},
     /* Subsequent motors base their I-frame values on the first one, P-frame values on the average of last two frames: */
@@ -337,6 +349,9 @@ typedef struct blackboxMainState_s {
     int16_t gyroUnfilt[XYZ_AXIS_COUNT];
     int16_t accADC[XYZ_AXIS_COUNT];
     int16_t debug[DEBUG16_VALUE_COUNT];
+    int16_t quadxServoPwm[QUADX_CONTROL_SURFACE_COUNT];
+    int16_t quadxServoAngle[QUADX_CONTROL_SURFACE_COUNT];
+    int16_t rcAux[8];
     int16_t motor[MAX_SUPPORTED_MOTORS];
     int16_t servo[MAX_SUPPORTED_SERVOS];
 #ifdef USE_DSHOT_TELEMETRY
@@ -687,6 +702,14 @@ static void writeIntraframe(void)
         blackboxWriteSigned16VBArray(blackboxCurrent->debug, DEBUG16_VALUE_COUNT);
     }
 
+    for (int i = 0; i < QUADX_CONTROL_SURFACE_COUNT; i++) {
+        blackboxWriteSignedVB(blackboxCurrent->quadxServoPwm[i] - DEFAULT_SERVO_MIDDLE);
+    }
+    blackboxWriteSigned16VBArray(blackboxCurrent->quadxServoAngle, QUADX_CONTROL_SURFACE_COUNT);
+    for (int i = 0; i < 8; i++) {
+        blackboxWriteSignedVB(blackboxCurrent->rcAux[i] - PWM_RANGE_MIDDLE);
+    }
+
     if (isFieldEnabled(FIELD_SELECT(MOTOR))) {
         //Motors can be below minimum output when disarmed, but that doesn't happen much
         blackboxWriteUnsignedVB(blackboxCurrent->motor[0] - getMotorOutputLow());
@@ -849,6 +872,10 @@ static void writeInterframe(void)
     if (testBlackboxCondition(CONDITION(DEBUG_LOG))) {
         blackboxWriteMainStateArrayUsingAveragePredictor(offsetof(blackboxMainState_t, debug), DEBUG16_VALUE_COUNT);
     }
+
+    blackboxWriteMainStateArrayUsingAveragePredictor(offsetof(blackboxMainState_t, quadxServoPwm), QUADX_CONTROL_SURFACE_COUNT);
+    blackboxWriteMainStateArrayUsingAveragePredictor(offsetof(blackboxMainState_t, quadxServoAngle), QUADX_CONTROL_SURFACE_COUNT);
+    blackboxWriteMainStateArrayUsingAveragePredictor(offsetof(blackboxMainState_t, rcAux), 8);
 
     if (isFieldEnabled(FIELD_SELECT(MOTOR))) {
         blackboxWriteMainStateArrayUsingAveragePredictor(offsetof(blackboxMainState_t, motor),     getMotorCount());
@@ -1162,6 +1189,21 @@ static void loadMainState(timeUs_t currentTimeUs)
 
     for (int i = 0; i < DEBUG16_VALUE_COUNT; i++) {
         blackboxCurrent->debug[i] = debug[i];
+    }
+
+    for (int i = 0; i < QUADX_CONTROL_SURFACE_COUNT; i++) {
+#ifdef USE_SERVOS
+        const int16_t pwm = quadxServoGetOutputPwm(i);
+#else
+        const int16_t pwm = DEFAULT_SERVO_MIDDLE;
+#endif
+        blackboxCurrent->quadxServoPwm[i] = pwm;
+        // Estimated angle in centidegrees: 1000/1500/2000 us -> -45/0/+45 degrees.
+        blackboxCurrent->quadxServoAngle[i] = (constrain(pwm, 1000, 2000) - 1500) * 9;
+    }
+
+    for (int i = 0; i < 8; i++) {
+        blackboxCurrent->rcAux[i] = lrintf(rcData[AUX1 + i]);
     }
 
     const int motorCount = getMotorCount();

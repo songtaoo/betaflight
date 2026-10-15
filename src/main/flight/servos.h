@@ -31,6 +31,8 @@
 #define DEFAULT_SERVO_MIDDLE 1500
 #define DEFAULT_SERVO_MAX 2000
 
+#define QUADX_CONTROL_SURFACE_COUNT 4
+
 // These must be consecutive, see 'reversedSources'
 enum {
     INPUT_STABILIZED_ROLL = 0,
@@ -161,6 +163,7 @@ void loadCustomServoMixer(void);
 int servoDirection(int servoIndex, int fromChannel);
 void servosInit(void);
 void servosFilterInit(void);
+int16_t quadxServoGetOutputPwm(uint8_t index);
 void servoMixer(void);
 // tricopter specific
 void servosTricopterInit(void);

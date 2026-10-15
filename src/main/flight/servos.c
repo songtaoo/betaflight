@@ -63,7 +63,6 @@
 #include "sensors/gyro.h"
 
 
-#define QUADX_CONTROL_SURFACE_COUNT 4
 #define QUADX_SERVO_DEFAULT_GAIN 20
 #define QUADX_SERVO_DEFAULT_THROTTLE_THRESHOLD 80
 #define QUADX_SERVO_DEFAULT_MIN_SPEED_MPS 10
@@ -125,6 +124,12 @@ void pgResetFn_servoParams(servoParam_t *instance)
 PG_REGISTER(gimbalConfig_t, gimbalConfig, PG_GIMBAL_CONFIG, 0);
 
 int16_t servo[MAX_SUPPORTED_SERVOS];
+static int16_t quadxServoOutputPwm[QUADX_CONTROL_SURFACE_COUNT] = {
+    DEFAULT_SERVO_MIDDLE,
+    DEFAULT_SERVO_MIDDLE,
+    DEFAULT_SERVO_MIDDLE,
+    DEFAULT_SERVO_MIDDLE,
+};
 
 static uint8_t servoRuleCount = 0;
 static servoMixer_t currentServoMixer[MAX_SERVO_RULES];
@@ -136,6 +141,15 @@ static bool quadxControlSurfacesEnabled(void)
 #else
     return false;
 #endif
+}
+
+int16_t quadxServoGetOutputPwm(uint8_t index)
+{
+    if (index >= QUADX_CONTROL_SURFACE_COUNT || !quadxControlSurfacesEnabled()) {
+        return DEFAULT_SERVO_MIDDLE;
+    }
+
+    return quadxServoOutputPwm[index];
 }
 
 
@@ -366,11 +380,7 @@ static void updateGimbalServos(uint8_t firstServoIndex)
 static void writeQuadxControlSurfaceServos(uint8_t firstServoIndex)
 {
     for (uint8_t i = 0; i < QUADX_CONTROL_SURFACE_COUNT; i++) {
-        DEBUG_SET(DEBUG_QUADX_SERVO, i, servo[i]);
-        // Estimated surface angle in centidegrees: 1000/1500/2000 us -> -45/0/+45 degrees.
-        // Use the final limited/filtered PWM; this estimate never enters the control path.
-        DEBUG_SET(DEBUG_QUADX_SERVO, QUADX_CONTROL_SURFACE_COUNT + i,
-            (constrain(servo[i], 1000, 2000) - 1500) * 9);
+        quadxServoOutputPwm[i] = servo[i];
         writeServoWithTracking(firstServoIndex + i, i);
     }
 }
@@ -572,13 +582,6 @@ static void quadxControlSurfaceMixer(void)
         const float speedRatio = minSpeedMps / effectiveSpeedMps;
         speedGain = speedRatio * speedRatio;
     }
-
-    // debug[0..3]: final PWM, debug[4..7]: estimated angles (centidegrees).
-    // debug[8..11]: GPS speed (cm/s), effective speed (cm/s), gain * 10000, GPS validity.
-    DEBUG_SET(DEBUG_QUADX_SERVO, 8, constrain(lrintf(gpsSpeedMps * 100.0f), 0, INT16_MAX));
-    DEBUG_SET(DEBUG_QUADX_SERVO, 9, constrain(lrintf(effectiveSpeedMps * 100.0f), 0, INT16_MAX));
-    DEBUG_SET(DEBUG_QUADX_SERVO, 10, lrintf(speedGain * 10000.0f));
-    DEBUG_SET(DEBUG_QUADX_SERVO, 11, gpsSpeedValid ? 1 : 0);
 
     const uint8_t throttleThreshold = servoConfig()->quadxServoThrottleThreshold;
     if (throttleThreshold > 0 && calculateThrottlePercent() <= throttleThreshold) {
