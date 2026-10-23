@@ -290,24 +290,19 @@ static const blackboxDeltaFieldDefinition_t blackboxMainFields[] = {
     BLACKBOX_DEBUG_FIELD_LIST(BLACKBOX_DEFINE_DEBUG_FIELD)
 #undef BLACKBOX_DEFINE_DEBUG_FIELD
 #undef BLACKBOX_DEBUG_FIELD_LIST
-    {"followMode",        -1, UNSIGNED, .Ipredict = PREDICT(0),    .Iencode = ENCODING(UNSIGNED_VB), .Ppredict = PREDICT(PREVIOUS),  .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
-    {"followTraceState",  -1, UNSIGNED, .Ipredict = PREDICT(0),    .Iencode = ENCODING(UNSIGNED_VB), .Ppredict = PREDICT(PREVIOUS),  .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
-    {"followTargetAge",   -1, UNSIGNED, .Ipredict = PREDICT(0),    .Iencode = ENCODING(UNSIGNED_VB), .Ppredict = PREDICT(PREVIOUS),  .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
-    {"followTargetWidth", -1, UNSIGNED, .Ipredict = PREDICT(0),    .Iencode = ENCODING(UNSIGNED_VB), .Ppredict = PREDICT(PREVIOUS),  .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
-    {"followTargetHeight",-1, UNSIGNED, .Ipredict = PREDICT(0),    .Iencode = ENCODING(UNSIGNED_VB), .Ppredict = PREDICT(PREVIOUS),  .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
-    {"followTargetArea",  -1, UNSIGNED, .Ipredict = PREDICT(0),    .Iencode = ENCODING(UNSIGNED_VB), .Ppredict = PREDICT(PREVIOUS),  .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
-    {"followPreviousArea",-1, UNSIGNED, .Ipredict = PREDICT(0),    .Iencode = ENCODING(UNSIGNED_VB), .Ppredict = PREDICT(PREVIOUS),  .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
-    {"followAreaRatio",   -1, UNSIGNED, .Ipredict = PREDICT(0),    .Iencode = ENCODING(UNSIGNED_VB), .Ppredict = PREDICT(PREVIOUS),  .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
-    {"followSafetyFlags", -1, UNSIGNED, .Ipredict = PREDICT(0),    .Iencode = ENCODING(UNSIGNED_VB), .Ppredict = PREDICT(PREVIOUS),  .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
-    {"followTriggerReason",-1,UNSIGNED, .Ipredict = PREDICT(0),    .Iencode = ENCODING(UNSIGNED_VB), .Ppredict = PREDICT(PREVIOUS),  .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
-    {"rcAux",              0, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
-    {"rcAux",              1, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
-    {"rcAux",              2, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
-    {"rcAux",              3, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
-    {"rcAux",              4, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
-    {"rcAux",              5, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
-    {"rcAux",              6, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
-    {"rcAux",              7, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    // Keep these names compact because the official parser limits each header line to 1024 bytes.
+    {"fAge",  -1, UNSIGNED, .Ipredict = PREDICT(0),    .Iencode = ENCODING(UNSIGNED_VB), .Ppredict = PREDICT(PREVIOUS),  .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"fArea", -1, UNSIGNED, .Ipredict = PREDICT(0),    .Iencode = ENCODING(UNSIGNED_VB), .Ppredict = PREDICT(PREVIOUS),  .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"fPrev", -1, UNSIGNED, .Ipredict = PREDICT(0),    .Iencode = ENCODING(UNSIGNED_VB), .Ppredict = PREDICT(PREVIOUS),  .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"fFlg",  -1, UNSIGNED, .Ipredict = PREDICT(0),    .Iencode = ENCODING(UNSIGNED_VB), .Ppredict = PREDICT(PREVIOUS),  .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"aux",   0, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"aux",   1, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"aux",   2, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"aux",   3, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"aux",   4, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"aux",   5, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"aux",   6, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
+    {"aux",   7, UNSIGNED, .Ipredict = PREDICT(1500), .Iencode = ENCODING(SIGNED_VB),   .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(ALWAYS)},
     /* Motors only rarely drops under minthrottle (when stick falls below mincommand), so predict minthrottle for it and use *unsigned* encoding (which is large for negative numbers but more compact for positive ones): */
     {"motor",       0, UNSIGNED, .Ipredict = PREDICT(MINMOTOR), .Iencode = ENCODING(UNSIGNED_VB), .Ppredict = PREDICT(AVERAGE_2), .Pencode = ENCODING(SIGNED_VB), CONDITION(AT_LEAST_MOTORS_1)},
     /* Subsequent motors base their I-frame values on the first one, P-frame values on the average of last two frames: */
@@ -398,16 +393,10 @@ typedef struct blackboxMainState_s {
     int16_t gyroUnfilt[XYZ_AXIS_COUNT];
     int16_t accADC[XYZ_AXIS_COUNT];
     int16_t debug[DEBUG16_VALUE_COUNT];
-    uint8_t followMode;
-    uint8_t followTraceState;
     uint32_t followTargetAge;
-    uint16_t followTargetWidth;
-    uint16_t followTargetHeight;
     uint32_t followTargetArea;
     uint32_t followPreviousArea;
-    uint16_t followAreaRatio;
     uint8_t followSafetyFlags;
-    uint8_t followTriggerReason;
     int16_t rcAux[8];
     int16_t motor[MAX_SUPPORTED_MOTORS];
     int16_t servo[MAX_SUPPORTED_SERVOS];
@@ -759,16 +748,10 @@ static void writeIntraframe(void)
         blackboxWriteSigned16VBArray(blackboxCurrent->debug, DEBUG16_VALUE_COUNT);
     }
 
-    blackboxWriteUnsignedVB(blackboxCurrent->followMode);
-    blackboxWriteUnsignedVB(blackboxCurrent->followTraceState);
     blackboxWriteUnsignedVB(blackboxCurrent->followTargetAge);
-    blackboxWriteUnsignedVB(blackboxCurrent->followTargetWidth);
-    blackboxWriteUnsignedVB(blackboxCurrent->followTargetHeight);
     blackboxWriteUnsignedVB(blackboxCurrent->followTargetArea);
     blackboxWriteUnsignedVB(blackboxCurrent->followPreviousArea);
-    blackboxWriteUnsignedVB(blackboxCurrent->followAreaRatio);
     blackboxWriteUnsignedVB(blackboxCurrent->followSafetyFlags);
-    blackboxWriteUnsignedVB(blackboxCurrent->followTriggerReason);
     for (int i = 0; i < 8; i++) {
         blackboxWriteSignedVB(blackboxCurrent->rcAux[i] - PWM_RANGE_MIDDLE);
     }
@@ -936,16 +919,10 @@ static void writeInterframe(void)
         blackboxWriteMainStateArrayUsingAveragePredictor(offsetof(blackboxMainState_t, debug), DEBUG16_VALUE_COUNT);
     }
 
-    blackboxWriteSignedVB((int32_t)blackboxCurrent->followMode - blackboxLast->followMode);
-    blackboxWriteSignedVB((int32_t)blackboxCurrent->followTraceState - blackboxLast->followTraceState);
     blackboxWriteSignedVB((int32_t)blackboxCurrent->followTargetAge - (int32_t)blackboxLast->followTargetAge);
-    blackboxWriteSignedVB((int32_t)blackboxCurrent->followTargetWidth - blackboxLast->followTargetWidth);
-    blackboxWriteSignedVB((int32_t)blackboxCurrent->followTargetHeight - blackboxLast->followTargetHeight);
     blackboxWriteSignedVB((int32_t)blackboxCurrent->followTargetArea - (int32_t)blackboxLast->followTargetArea);
     blackboxWriteSignedVB((int32_t)blackboxCurrent->followPreviousArea - (int32_t)blackboxLast->followPreviousArea);
-    blackboxWriteSignedVB((int32_t)blackboxCurrent->followAreaRatio - blackboxLast->followAreaRatio);
     blackboxWriteSignedVB((int32_t)blackboxCurrent->followSafetyFlags - blackboxLast->followSafetyFlags);
-    blackboxWriteSignedVB((int32_t)blackboxCurrent->followTriggerReason - blackboxLast->followTriggerReason);
     blackboxWriteMainStateArrayUsingAveragePredictor(offsetof(blackboxMainState_t, rcAux), 8);
 
     if (isFieldEnabled(FIELD_SELECT(MOTOR))) {
@@ -1264,16 +1241,10 @@ static void loadMainState(timeUs_t currentTimeUs)
 
     followSafetyState_t followSafety;
     followGetSafetyState(&followSafety);
-    blackboxCurrent->followMode = followSystemData.mode;
-    blackboxCurrent->followTraceState = followSystemData.traceState;
     blackboxCurrent->followTargetAge = followSafety.targetAgeMs;
-    blackboxCurrent->followTargetWidth = followSafety.targetWidth;
-    blackboxCurrent->followTargetHeight = followSafety.targetHeight;
     blackboxCurrent->followTargetArea = followSafety.targetArea;
     blackboxCurrent->followPreviousArea = followSafety.previousTargetArea;
-    blackboxCurrent->followAreaRatio = followSafety.areaRatioPermille;
     blackboxCurrent->followSafetyFlags = followSafety.flags;
-    blackboxCurrent->followTriggerReason = followSafety.triggerReason;
     for (int i = 0; i < 8; i++) {
         blackboxCurrent->rcAux[i] = lrintf(rcData[AUX1 + i]);
     }
